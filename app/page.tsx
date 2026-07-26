@@ -1,6 +1,7 @@
 "use client";
 
-import { useChat } from "ai/react";
+import { useChat } from "@ai-sdk/react";
+import { useState } from "react";
 
 const LINE_DOTS: { name: string; color: string }[] = [
   { name: "Red", color: "#DA291C" },
@@ -11,8 +12,20 @@ const LINE_DOTS: { name: string; color: string }[] = [
 ];
 
 export default function Home() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } =
-    useChat();
+  const { messages, status, sendMessage } = useChat();
+  const [input, setInput] = useState("");
+
+  const isLoading = status !== "ready";
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setInput(e.target.value);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input) return;
+    sendMessage({ text: input });
+    setInput("");
+  };
 
   return (
     <main className="min-h-screen flex flex-col">
@@ -66,7 +79,9 @@ export default function Home() {
               {m.role === "user" ? "You" : "Copilot"}
             </p>
             <div className="text-sm whitespace-pre-wrap leading-relaxed">
-              {m.content}
+              {m.parts.map((part, i) =>
+                part.type === "text" ? <span key={i}>{part.text}</span> : null,
+              )}
             </div>
           </div>
         ))}

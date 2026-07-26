@@ -1,4 +1,4 @@
-import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { transitTools } from "@/lib/tools";
 
@@ -19,12 +19,11 @@ export async function POST(req: Request) {
   const { messages } = await req.json();
 
   const result = streamText({
-    model: openai("gpt-4o-mini"),
+    model: google("gemini-2.5-flash"),
     system: SYSTEM_PROMPT,
     messages,
     tools: transitTools,
-    maxSteps: 5, // allows the model to chain tool calls, e.g. findStop -> checkAlerts -> checkPredictions
   });
 
-  return result.toDataStreamResponse();
+  return result.toTextStreamResponse();
 }
