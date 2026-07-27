@@ -27,8 +27,8 @@ async function mbtaGet(path: string, params: Record<string, string>) {
 /** Find stops matching a rider-typed name, e.g. "Harvard" or "Alewife". */
 export async function searchStops(query: string) {
   const data = await mbtaGet("/stops", {
-    "filter[route_type]": "0,1,2,3", // light rail, heavy rail, commuter rail, bus
-    "page[limit]": "8",
+    "filter[location_type]": "1", // named stations, not individual platforms/bus poles
+    "page[limit]": "500",
   });
 
   // MBTA's API doesn't do fuzzy text search server-side, so we filter client-side.

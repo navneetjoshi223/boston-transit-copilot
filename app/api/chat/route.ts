@@ -1,5 +1,13 @@
 import { google } from "@ai-sdk/google";
-import { streamText } from "ai";
+import {
+  APICallError,
+  convertToModelMessages,
+  RetryError,
+  stepCountIs,
+  streamText,
+  type UIMessage,
+} from "ai";
+import { DAILY_LIMIT_MESSAGE } from "@/lib/errors";
 import { transitTools } from "@/lib/tools";
 
 export const runtime = "edge";
@@ -16,14 +24,25 @@ Rules:
 - Keep answers short. Riders are checking this on their phone, often in a hurry.`;
 
 export async function POST(req: Request) {
-  const { messages } = await req.json();
+  const { messages }: { messages: UIMessage[] } = await req.json();
 
   const result = streamText({
-    model: google("gemini-2.5-flash"),
+    model: google("gemini-flash-latest"),
     system: SYSTEM_PROMPT,
-    messages,
+    messages: await convertToModelMessages(messages),
     tools: transitTools,
+    stopWhen: stepCountIs(5),
   });
 
-  return result.toTextStreamResponse();
+  return result.toUIMessageStreamResponse({
+    onError: (error) => {
+      console.error("chat stream error:", error);
+
+      const cause = RetryError.isInstance(error) ? error.lastError : error;
+      if (APICallError.isInstance(cause) && cause.statusCode === 429) {
+        return DAILY_LIMIT_MESSAGE;
+      }
+      return "Something went wrong checking the T. Please try again.";
+    },
+  });
 }

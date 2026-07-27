@@ -1,7 +1,10 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { DAILY_LIMIT_MESSAGE } from "@/lib/errors";
+
+const SLOW_RESPONSE_MS = 12_000;
 
 const LINE_DOTS: { name: string; color: string }[] = [
   { name: "Red", color: "#DA291C" },
@@ -12,10 +15,21 @@ const LINE_DOTS: { name: string; color: string }[] = [
 ];
 
 export default function Home() {
-  const { messages, status, sendMessage } = useChat();
+  const { messages, status, error, sendMessage, clearError, regenerate } =
+    useChat();
   const [input, setInput] = useState("");
+  const [isSlow, setIsSlow] = useState(false);
 
-  const isLoading = status !== "ready";
+  const isLoading = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    if (!isLoading) {
+      setIsSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsSlow(true), SLOW_RESPONSE_MS);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setInput(e.target.value);
@@ -23,6 +37,7 @@ export default function Home() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input) return;
+    clearError();
     sendMessage({ text: input });
     setInput("");
   };
@@ -88,8 +103,23 @@ export default function Home() {
 
         {isLoading && (
           <p className="text-xs font-mono text-mbta-dim animate-pulse">
-            checking the T…
+            {isSlow ? "still checking the T… this is taking longer than usual" : "checking the T…"}
           </p>
+        )}
+
+        {error && (
+          <div className="text-sm border border-red-500/30 bg-red-500/10 text-red-200 rounded-lg p-4 flex items-center justify-between gap-4">
+            <span>{error.message || "Something went wrong reaching the T."}</span>
+            {error.message !== DAILY_LIMIT_MESSAGE && (
+              <button
+                type="button"
+                onClick={() => regenerate()}
+                className="shrink-0 text-xs font-semibold uppercase tracking-wide underline underline-offset-2"
+              >
+                Try again
+              </button>
+            )}
+          </div>
         )}
       </section>
 
