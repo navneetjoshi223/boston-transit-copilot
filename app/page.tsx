@@ -2,7 +2,33 @@
 
 import { useChat } from "@ai-sdk/react";
 import { useEffect, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/errors";
+
+// react-markdown passes an extra `node` (AST) prop to every renderer — drop it
+// before spreading the rest onto a plain DOM element, or it leaks in as a
+// literal `node="[object Object]"` attribute.
+const markdownComponents: Components = {
+  p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+  ul: ({ node, ...props }) => (
+    <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-0.5" {...props} />
+  ),
+  ol: ({ node, ...props }) => (
+    <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-0.5" {...props} />
+  ),
+  strong: ({ node, ...props }) => (
+    <strong className="font-semibold text-white" {...props} />
+  ),
+  a: ({ node, ...props }) => (
+    <a
+      className="text-mbta-orange underline underline-offset-2"
+      target="_blank"
+      rel="noreferrer"
+      {...props}
+    />
+  ),
+};
 
 const SLOW_RESPONSE_MS = 12_000;
 
@@ -93,10 +119,23 @@ export default function Home() {
             <p className="text-xs uppercase tracking-wide text-mbta-dim mb-1">
               {m.role === "user" ? "You" : "Copilot"}
             </p>
-            <div className="text-sm whitespace-pre-wrap leading-relaxed">
-              {m.parts.map((part, i) =>
-                part.type === "text" ? <span key={i}>{part.text}</span> : null,
-              )}
+            <div className="text-sm leading-relaxed">
+              {m.parts.map((part, i) => {
+                if (part.type !== "text") return null;
+                return m.role === "user" ? (
+                  <span key={i} className="whitespace-pre-wrap">
+                    {part.text}
+                  </span>
+                ) : (
+                  <ReactMarkdown
+                    key={i}
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                  >
+                    {part.text}
+                  </ReactMarkdown>
+                );
+              })}
             </div>
           </div>
         ))}
