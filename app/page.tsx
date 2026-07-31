@@ -48,6 +48,13 @@ export default function Home() {
   const [isSlow, setIsSlow] = useState(false);
   const speech = useSpeechInput(setInput);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1500);
+  };
 
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -124,6 +131,10 @@ export default function Home() {
           const isLastMessage = idx === messages.length - 1;
           const hasText = m.parts.some((part) => part.type === "text");
           const isStuck = m.role === "assistant" && !hasText && !(isLastMessage && isLoading);
+          const messageText = m.parts
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n\n");
 
           return (
             <div
@@ -134,9 +145,37 @@ export default function Home() {
                   : "self-start max-w-[85%] bg-transparent border-l-2 border-mbta-orange pl-4 py-1"
               }
             >
-              <p className="text-xs uppercase tracking-wide text-mbta-dim mb-1">
-                {m.role === "user" ? "You" : "Copilot"}
-              </p>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="text-xs uppercase tracking-wide text-mbta-dim">
+                  {m.role === "user" ? "You" : "Copilot"}
+                </p>
+                {m.role === "assistant" && !isStuck && hasText && (
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(m.id, messageText)}
+                    className="text-xs text-mbta-dim hover:text-white flex items-center gap-1"
+                    title="Copy response"
+                  >
+                    {copiedId === m.id ? (
+                      "Copied"
+                    ) : (
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
               <div className="text-sm leading-relaxed">
                 {isStuck ? (
                   <span className="text-mbta-dim italic">
