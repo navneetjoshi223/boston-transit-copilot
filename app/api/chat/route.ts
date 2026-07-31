@@ -2,13 +2,35 @@ import { groq } from "@ai-sdk/groq";
 import {
   APICallError,
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   RetryError,
   stepCountIs,
   streamText,
   type UIMessage,
 } from "ai";
 import { RATE_LIMIT_MESSAGE } from "@/lib/errors";
+import { containsVulgarLanguage, getLatestUserText } from "@/lib/moderation";
 import { transitTools } from "@/lib/tools";
+
+const VULGAR_LANGUAGE_MESSAGE =
+  "Let's keep it to transit questions — please rephrase without that language.";
+
+// A canned reply built by hand as a UI message stream, so it renders in the
+// existing chat UI exactly like a real assistant message, without ever
+// calling the model — no tokens spent, no tool calls made.
+function moderatedResponse() {
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      writer.write({ type: "start" });
+      writer.write({ type: "text-start", id: "0" });
+      writer.write({ type: "text-delta", id: "0", delta: VULGAR_LANGUAGE_MESSAGE });
+      writer.write({ type: "text-end", id: "0" });
+      writer.write({ type: "finish" });
+    },
+  });
+  return createUIMessageStreamResponse({ stream });
+}
 
 export const runtime = "edge";
 
@@ -39,11 +61,26 @@ Rules:
   origin stop without going anywhere near where they're actually headed (e.g. a route can have
   two termini, and only one direction reaches a given destination). Never state a destination
   you haven't confirmed via headingTo or a route's direction_destinations.
+- If the rider names both an origin and a destination, don't reason out a transfer plan from
+  your own knowledge of the map — it can be wrong about which lines run through which stations
+  (this has happened before: assuming a station isn't on a line it actually is, or that a route
+  ends somewhere it doesn't). Start by calling checkPredictions on the origin stop with NO
+  routeId filter — the routeId on each returned prediction is ground truth for which routes
+  actually run through that stop right now. Pick candidates from that real list, not memory,
+  then check their headingTo to see if any already reaches the destination directly (a one-seat
+  ride). checkAlerts does not confirm a route serves a stop, only checkPredictions/headingTo
+  does — never name a specific route or line in a transfer plan unless a tool call actually
+  confirmed it serves that stop. Only describe a multi-leg transfer once you've confirmed (via
+  headingTo/direction_destinations) that no single route covers both ends.
 - Use at most 2-3 tool calls before answering. Never go silent — always give the rider your
   best answer, or ask one clarifying question, instead of retrying until you run out of tries.`;
 
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
+
+  if (containsVulgarLanguage(getLatestUserText(messages))) {
+    return moderatedResponse();
+  }
 
   const result = streamText({
     model: groq("openai/gpt-oss-120b"),
