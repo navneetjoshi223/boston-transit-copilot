@@ -64,7 +64,7 @@ export default function Home() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input) return;
+    if (!input.trim()) return;
     clearError();
     speech.stop(); // don't let a still-listening mic keep appending to the next message
     sendMessage({ text: input });
@@ -227,7 +227,7 @@ export default function Home() {
           )}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !input.trim()}
             className="bg-mbta-orange text-black font-semibold text-sm rounded-md px-4 py-2.5 disabled:opacity-50"
           >
             Go
@@ -238,6 +238,18 @@ export default function Home() {
             {speech.error}
           </p>
         )}
+        <p className="max-w-2xl mx-auto text-xs text-mbta-dim mt-2">
+          Transit Copilot can make mistakes. For anything time-critical, double-check at{" "}
+          <a
+            href="https://www.mbta.com"
+            target="_blank"
+            rel="noreferrer"
+            className="text-mbta-orange underline underline-offset-2"
+          >
+            mbta.com
+          </a>
+          .
+        </p>
       </form>
     </main>
   );
