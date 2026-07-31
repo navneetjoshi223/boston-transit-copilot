@@ -7,14 +7,36 @@ Example questions:
 - "Next trains from Harvard toward Alewife"
 - "Is the Orange Line running normally?"
 
+## Tech stack
+
+- **Framework:** Next.js 14 (App Router), TypeScript, deployed on the Edge runtime
+- **UI:** React 18, Tailwind CSS, `react-markdown` for rendering responses, browser Speech-to-Text (Web Speech API) for voice input
+- **AI:** [Vercel AI SDK](https://ai-sdk.dev) (`streamText`, tool calling, streaming UI) + [Groq](https://groq.com) (`openai/gpt-oss-120b`) as the LLM provider
+- **Data:** [MBTA V3 API](https://api-v3.mbta.com) (JSON:API) for live stops, predictions, and alerts — no separate transit SDK, just typed `fetch` wrappers
+- **Validation:** Zod schemas for tool inputs
+- **Moderation:** a pre-LLM profanity guard (`bad-words`) that short-circuits obviously abusive input before it ever reaches the model, so no tokens are spent on it
+
+## Features
+
+- Voice input — dictate a question via the mic button (Web Speech API)
+- Markdown-rendered responses (lists, bold, links)
+- Copy-to-clipboard on any response
+- A persistent disclaimer that the assistant can be wrong and time-critical info should be checked at mbta.com
+- A graceful "couldn't find a clear answer" fallback if the model exhausts its tool-call budget without producing text, instead of a blank reply
+- Error messages that distinguish a transient rate limit (worth retrying) from a hard daily quota (retry button is hidden, since retrying won't help)
+
 ## Why I built this
 
-Portfolio project to demonstrate agentic AI patterns — an LLM that decides when to call tools, wraps a real external API, and handles failure honestly instead of guessing. Not trying to compete with Google Maps or the MBTA app; the goal was a small project I fully understand end to end.
+Portfolio project to demonstrate agentic AI patterns - an LLM that decides when to call tools, wraps a real external API, and handles failure honestly instead of guessing. Not trying to compete with Google Maps or the MBTA app; the goal was a small project I fully understand end to end.
 
 **In scope for v1:**
 - Status and arrivals for a stop or line, by name
 - The agent chains its own tool calls (find the stop → check alerts → check predictions) instead of a hardcoded pipeline
 - Honest failure when MBTA's API is slow or down — retry once, then say so, don't guess
+- Disambiguates ambiguous stop names (e.g. "Watertown" matches both Watertown Square and Watertown Yard) by asking which one instead of guessing
+- Verifies a route actually heads toward the rider's stated destination before claiming it, instead of assuming any route serving the origin is the right one
+- Checks real predictions at the origin stop before proposing a transfer plan, instead of reasoning from the model's own (unreliable) knowledge of the map
+- Deliberately gives no stop-by-stop itinerary or travel-time estimate — MBTA's API doesn't expose either, and the model can't be trusted to estimate them, so it's instructed not to guess
 
 **Not in v1** (see Production Considerations below):
 - Multi-leg trip planning
@@ -26,7 +48,7 @@ Portfolio project to demonstrate agentic AI patterns — an LLM that decides whe
 
 - `lib/mbta.ts` — plain functions hitting the real MBTA V3 API (stops, predictions, alerts, routes). No AI here.
 - `lib/tools.ts` — wraps those functions as AI SDK tools with Zod schemas so the model can call them.
-- `app/api/chat/route.ts` — the agent loop. `streamText` + tools + `maxSteps: 5` lets the model chain `findStop` → `checkAlerts` → `checkPredictions` on its own.
+- `app/api/chat/route.ts` — the agent loop. `streamText` + tools + `stopWhen: stepCountIs(5)` lets the model chain `findStop` → `checkAlerts` → `checkPredictions` on its own.
 - `app/page.tsx` — chat UI using `useChat` for streaming.
 
 The MBTA layer has no dependency on the AI layer — it's just testable TypeScript that happens to be exposed to a model as tools.
@@ -36,7 +58,7 @@ The MBTA layer has no dependency on the AI layer — it's just testable TypeScri
 1. Install Node.js 18.17+: https://nodejs.org
 2. `npm install`
 3. Get keys:
-   - Gemini (free, no card required): https://aistudio.google.com/apikey
+   - Groq (free): https://console.groq.com/keys
    - MBTA (free, optional but recommended — raises your rate limit from 20/min to 1000/min): https://api-v3.mbta.com/register
 4. `cp .env.local.example .env.local` and fill in your keys
 5. `npm run dev`, then open http://localhost:3000
