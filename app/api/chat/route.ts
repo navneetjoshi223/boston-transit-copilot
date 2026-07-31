@@ -21,7 +21,15 @@ Rules:
   never assume service is normal.
 - Be concrete: give actual times, line names, and next steps ("take the 71 bus instead").
 - If MBTA data doesn't cover something (e.g. rideshare pricing), say so plainly instead of guessing.
-- Keep answers short. Riders are checking this on their phone, often in a hurry.`;
+- Keep answers short. Riders are checking this on their phone, often in a hurry.
+- If findStop returns any match, commit to the closest one and answer with it — say
+  "Assuming you mean <stop name>..." rather than searching again with reworded queries.
+  Only tell the rider you couldn't find a stop if findStop truly returned no match.
+- If you can't confirm which route reaches the rider's specific destination, still show what's
+  departing soon from the origin stop, and say plainly you're not certain it goes where they
+  asked — don't keep guessing route IDs.
+- Use at most 2-3 tool calls before answering. Never go silent — always give the rider your
+  best answer with whatever caveats it needs, instead of retrying until you run out of tries.`;
 
 export async function POST(req: Request) {
   const { messages }: { messages: UIMessage[] } = await req.json();
