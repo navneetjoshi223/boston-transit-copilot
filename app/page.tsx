@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/errors";
+import { useSpeechInput } from "@/lib/useSpeechInput";
 
 // react-markdown passes an extra `node` (AST) prop to every renderer — drop it
 // before spreading the rest onto a plain DOM element, or it leaks in as a
@@ -45,6 +46,7 @@ export default function Home() {
     useChat();
   const [input, setInput] = useState("");
   const [isSlow, setIsSlow] = useState(false);
+  const speech = useSpeechInput(setInput);
 
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -107,38 +109,56 @@ export default function Home() {
           </div>
         )}
 
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={
-              m.role === "user"
-                ? "self-end max-w-[85%] bg-mbta-panel border border-white/10 rounded-lg px-4 py-2.5"
-                : "self-start max-w-[85%] bg-transparent border-l-2 border-mbta-orange pl-4 py-1"
-            }
-          >
-            <p className="text-xs uppercase tracking-wide text-mbta-dim mb-1">
-              {m.role === "user" ? "You" : "Copilot"}
-            </p>
-            <div className="text-sm leading-relaxed">
-              {m.parts.map((part, i) => {
-                if (part.type !== "text") return null;
-                return m.role === "user" ? (
-                  <span key={i} className="whitespace-pre-wrap">
-                    {part.text}
+        {messages.map((m, idx) => {
+          // The model can exhaust its tool-call budget without ever producing
+          // text (finishReason "tool-calls" with no answer) — that ends the
+          // stream cleanly, so no error fires and the bubble would otherwise
+          // just be blank forever. Only call it "stuck" once generation for
+          // this message has actually stopped, not while it's still in flight.
+          const isLastMessage = idx === messages.length - 1;
+          const hasText = m.parts.some((part) => part.type === "text");
+          const isStuck = m.role === "assistant" && !hasText && !(isLastMessage && isLoading);
+
+          return (
+            <div
+              key={m.id}
+              className={
+                m.role === "user"
+                  ? "self-end max-w-[85%] bg-mbta-panel border border-white/10 rounded-lg px-4 py-2.5"
+                  : "self-start max-w-[85%] bg-transparent border-l-2 border-mbta-orange pl-4 py-1"
+              }
+            >
+              <p className="text-xs uppercase tracking-wide text-mbta-dim mb-1">
+                {m.role === "user" ? "You" : "Copilot"}
+              </p>
+              <div className="text-sm leading-relaxed">
+                {isStuck ? (
+                  <span className="text-mbta-dim italic">
+                    Couldn&rsquo;t find a clear answer for that — try rephrasing,
+                    or double-check the stop or line name.
                   </span>
                 ) : (
-                  <ReactMarkdown
-                    key={i}
-                    remarkPlugins={[remarkGfm]}
-                    components={markdownComponents}
-                  >
-                    {part.text}
-                  </ReactMarkdown>
-                );
-              })}
+                  m.parts.map((part, i) => {
+                    if (part.type !== "text") return null;
+                    return m.role === "user" ? (
+                      <span key={i} className="whitespace-pre-wrap">
+                        {part.text}
+                      </span>
+                    ) : (
+                      <ReactMarkdown
+                        key={i}
+                        remarkPlugins={[remarkGfm]}
+                        components={markdownComponents}
+                      >
+                        {part.text}
+                      </ReactMarkdown>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && (
           <p className="text-xs font-mono text-mbta-dim animate-pulse">
@@ -174,6 +194,36 @@ export default function Home() {
             onChange={handleInputChange}
             placeholder="Ask about a line, stop, or trip…"
           />
+          {speech.isSupported && (
+            <button
+              type="button"
+              onClick={() => speech.toggle(input)}
+              aria-label={speech.isListening ? "Stop dictation" : "Start dictation"}
+              title={speech.isListening ? "Stop dictation" : "Start dictation"}
+              className={
+                "shrink-0 rounded-md px-3 py-2.5 border " +
+                (speech.isListening
+                  ? "bg-mbta-orange border-mbta-orange text-black animate-pulse"
+                  : "bg-mbta-panel border-white/10 text-mbta-dim")
+              }
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </button>
+          )}
           <button
             type="submit"
             disabled={isLoading}
@@ -182,6 +232,11 @@ export default function Home() {
             Go
           </button>
         </div>
+        {speech.error && (
+          <p className="max-w-2xl mx-auto text-xs text-red-300 mt-2">
+            {speech.error}
+          </p>
+        )}
       </form>
     </main>
   );
