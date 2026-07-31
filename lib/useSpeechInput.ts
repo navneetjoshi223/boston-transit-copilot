@@ -44,9 +44,16 @@ export function useSpeechInput(onResult: (transcript: string) => void) {
     setIsSupported(getSpeechRecognitionCtor() !== undefined);
   }, []);
 
-  // Stops the current recognition session, if one is running.
+  // Stops the current recognition session, if one is running. Real browsers stop
+  // asynchronously — the engine can still fire a trailing onresult (or even onerror)
+  // for audio it was already processing before onend actually arrives. Once we've
+  // decided this session is over, clearing the ref makes those late events into
+  // no-ops (each handler checks it's still the active instance) instead of
+  // reviving stale text into whatever's now in the box.
   const stop = () => {
     recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setIsListening(false); // onend for this instance is now ignored, so set it directly
   };
 
   // Starts a new recognition session, seeded with the text already in the box
@@ -64,13 +71,27 @@ export function useSpeechInput(onResult: (transcript: string) => void) {
     recognition.lang = "en-US";
 
     recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+      if (recognitionRef.current !== recognition) return; // stale session, ignore
+
+      // event.results holds every phrase recognized so far this session, not just the
+      // newest one — a pause finalizes the current phrase and moves on to the next,
+      // so re-scanning from event.resultIndex each time would drop everything already
+      // said. Rebuild from all of it every time: finalized phrases first, then
+      // whatever's still being actively recognized.
+      let finalText = "";
+      let interimText = "";
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalText += result[0].transcript;
+        } else {
+          interimText += result[0].transcript;
+        }
       }
-      onResult(baseTextRef.current + transcript);
+      onResult(baseTextRef.current + finalText + interimText);
     };
     recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return; // stale session, ignore
       setError(
         event.error === "not-allowed"
           ? "Microphone access denied."
@@ -78,7 +99,10 @@ export function useSpeechInput(onResult: (transcript: string) => void) {
       );
       setIsListening(false);
     };
-    recognition.onend = () => setIsListening(false);
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return; // already superseded
+      setIsListening(false);
+    };
 
     recognitionRef.current = recognition;
     recognition.start();
@@ -96,5 +120,5 @@ export function useSpeechInput(onResult: (transcript: string) => void) {
 
   useEffect(() => stop, []);
 
-  return { isSupported, isListening, error, toggle };
+  return { isSupported, isListening, error, toggle, stop };
 }
