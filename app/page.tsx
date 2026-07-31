@@ -66,6 +66,7 @@ export default function Home() {
     e.preventDefault();
     if (!input) return;
     clearError();
+    speech.stop(); // don't let a still-listening mic keep appending to the next message
     sendMessage({ text: input });
     setInput("");
   };
