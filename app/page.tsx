@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { DAILY_LIMIT_MESSAGE } from "@/lib/errors";
@@ -47,6 +47,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [isSlow, setIsSlow] = useState(false);
   const speech = useSpeechInput(setInput);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -58,6 +59,10 @@ export default function Home() {
     const timer = setTimeout(() => setIsSlow(true), SLOW_RESPONSE_MS);
     return () => clearTimeout(timer);
   }, [isLoading]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setInput(e.target.value);
@@ -72,7 +77,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="h-screen flex flex-col overflow-hidden">
       {/* Header reads like a station sign, not an app header */}
       <header className="border-b border-white/10 px-6 py-5">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
@@ -181,6 +186,7 @@ export default function Home() {
             )}
           </div>
         )}
+        <div ref={bottomRef} />
       </section>
 
       {/* Input, styled like a countdown/entry row on a real board */}
